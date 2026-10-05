@@ -1,0 +1,70 @@
+# ==============================================================================
+# Configuration d'application pour Autodeploy
+# Déposer ce fichier dans /etc/autodeploy/apps.d/<mon-app>.conf
+# ==============================================================================
+
+# Nom logique du conteneur en production (ex: 'api-gateway', 'mon-crm', etc.)
+APP_NAME="mon-application"
+
+# Chemin du dépôt d'image dans le GitLab Registry (SANS le tag)
+IMAGE_REPO="registry.gitlab.mon-entreprise.com/groupe/projet/mon-application"
+
+# ID numérique du projet dans GitLab (visible sous le titre du projet sur l'interface GitLab)
+# Utilisé pour interroger l'API /api/v4/projects/<id>/repository/tags
+GITLAB_PROJECT_ID="128"
+
+# Durée maximale en secondes d'attente pour que le conteneur devienne "healthy" (défaut: 60)
+HEALTHCHECK_TIMEOUT=45
+
+# Intervalle de vérification du healthcheck en secondes (défaut: 2)
+HEALTHCHECK_INTERVAL=2
+
+# Réseau Docker partagé avec le conteneur Traefik
+DOCKER_NETWORK="traefik-net"
+
+# Nom d'hôte public desservi par Traefik
+DOMAIN_NAME="app.mon-entreprise.com"
+
+# Arguments passés à 'docker run' pour démarrer l'application
+# REMARQUE : Ne pas spécifier --name ni l'image ici, le script s'en charge.
+DOCKER_RUN_ARGS=(
+  --restart unless-stopped
+  --network "$DOCKER_NETWORK"
+  
+  # Variables d'environnement applicatives
+  -e "NODE_ENV=production"
+  -e "PORT=3000"
+  
+  # Volumes / Bind mounts si nécessaire
+  # -v "/var/data/mon-application:/data"
+
+  # Limites de ressources recommandées
+  --memory "512m"
+  --cpus "1.0"
+
+  # ============================================================================
+  # Configuration Traefik (Découverte dynamique par labels)
+  # ============================================================================
+  --label "traefik.enable=true"
+  --label "traefik.http.routers.${APP_NAME}.rule=Host(\`${DOMAIN_NAME}\`)"
+  --label "traefik.http.routers.${APP_NAME}.entrypoints=websecure"
+  --label "traefik.http.routers.${APP_NAME}.tls=true"
+  --label "traefik.http.routers.${APP_NAME}.tls.certresolver=letsencrypt"
+  
+  # Port interne sur lequel l'application écoute DANS le conteneur
+  --label "traefik.http.services.${APP_NAME}.loadbalancer.server.port=3000"
+
+  # ============================================================================
+  # Healthcheck Docker (CRUCIAL pour le zéro downtime)
+  # Le conteneur ne sera considéré prêt que quand ce test réussit
+  # ============================================================================
+  --health-cmd "curl -f http://localhost:3000/health || exit 1"
+  --health-interval 3s
+  --health-timeout 2s
+  --health-retries 3
+  --health-start-period 5s
+)
+
+# Commandes optionnelles à exécuter avant / après déploiement
+# PRE_DEPLOY_CMD="echo 'Préparation déploiement...'"
+# POST_DEPLOY_CMD="echo 'Déploiement terminé pour ${APP_NAME}'"

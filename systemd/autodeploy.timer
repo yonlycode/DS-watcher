@@ -1,0 +1,19 @@
+[Unit]
+Description=Timer for Docker Automatic Rolling Deployer
+Documentation=https://github.com/votre-org/autodeploy
+
+[Timer]
+# Premier lancement 1 minute après le démarrage du serveur
+OnBootSec=1min
+
+# Intervalle régulier entre chaque exécution (ajustable selon vos besoins, ex: 1min, 2min, 5min)
+OnUnitActiveSec=2min
+
+# Décalage aléatoire pour éviter des pics d'appels à la seconde exacte
+RandomizedDelaySec=15s
+
+# Rattrapage si le serveur était éteint
+Persistent=true
+
+[Install]
+WantedBy=timers.target

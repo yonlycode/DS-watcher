@@ -1,0 +1,20 @@
+[Unit]
+Description=Docker Automatic Rolling Deployer
+Documentation=https://github.com/votre-org/autodeploy
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/autodeploy.sh
+User=root
+Group=root
+
+# Sécurisation de l'exécution
+TimeoutStartSec=600
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

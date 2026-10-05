@@ -1,0 +1,60 @@
+# ==============================================================================
+# Fichiers de configuration sensibles et secrets
+# ==============================================================================
+*.env
+!*.env.example
+*.token
+*.key
+*.pem
+/etc/autodeploy/
+
+# ==============================================================================
+# OpenTofu / Terraform (Fichiers d'état, plugins et variables locales)
+# ==============================================================================
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+crash.log
+crash.*.log
+
+# ==============================================================================
+# Fichiers temporaires générés par les tests et l'exécution
+# ==============================================================================
+**/sandbox/
+*.lock
+*.lockdir
+/tmp/autodeploy.*
+
+# ==============================================================================
+# Logs applicatifs
+# ==============================================================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==============================================================================
+# Système d'exploitation & IDE
+# ==============================================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+
+# Éditeurs
+.idea/
+.vscode/
+*.swp
+*.swo
