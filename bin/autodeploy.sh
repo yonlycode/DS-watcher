@@ -130,9 +130,11 @@ get_latest_semver_tag() {
       proto="http"
     fi
 
+    local reg_user="${REGISTRY_USER:-${GITLAB_USER:-}}"
+    local reg_pass="${REGISTRY_TOKEN:-${token:-}}"
     local reg_response
-    if [[ -n "$token" && -n "${GITLAB_USER:-}" ]]; then
-      reg_response=$(curl -s -f -u "${GITLAB_USER}:${token}" "${proto}://${host}/v2/${path}/tags/list" 2>/dev/null || echo "{}")
+    if [[ -n "$reg_user" && -n "$reg_pass" ]]; then
+      reg_response=$(curl -s -f -u "${reg_user}:${reg_pass}" "${proto}://${host}/v2/${path}/tags/list" 2>/dev/null || echo "{}")
     else
       reg_response=$(curl -s -f "${proto}://${host}/v2/${path}/tags/list" 2>/dev/null || echo "{}")
     fi
@@ -326,13 +328,17 @@ main() {
   # shellcheck source=/dev/null
   source "$ENV_FILE"
 
-  # Authentification Docker Registry
-  if [[ -n "${GITLAB_REGISTRY:-}" && -n "${GITLAB_TOKEN:-}" ]]; then
-    log INFO "Authentification au registre Docker ${GITLAB_REGISTRY}..."
-    echo "$GITLAB_TOKEN" | docker login "$GITLAB_REGISTRY" \
-      -u "${GITLAB_USER:-deploy-token}" \
+  # Authentification Docker Registry (JFrog Artifactory, GitLab Registry, etc.)
+  local reg_host="${REGISTRY_HOST:-${GITLAB_REGISTRY:-}}"
+  local reg_user="${REGISTRY_USER:-${GITLAB_USER:-}}"
+  local reg_pass="${REGISTRY_TOKEN:-${GITLAB_TOKEN:-}}"
+
+  if [[ -n "$reg_host" && -n "$reg_pass" ]]; then
+    log INFO "Authentification au registre Docker ${reg_host}..."
+    echo "$reg_pass" | docker login "$reg_host" \
+      -u "${reg_user:-deploy-token}" \
       --password-stdin >/dev/null 2>&1 || {
-        log ERROR "Échec de l'authentification Docker au registre ${GITLAB_REGISTRY}"
+        log ERROR "Échec de l'authentification Docker au registre ${reg_host}"
         exit 1
       }
   fi

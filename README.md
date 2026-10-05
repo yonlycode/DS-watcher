@@ -12,11 +12,12 @@ Il remplace les interventions manuelles en automatisant la surveillance des tags
 3. [Structure du projet](#3-structure-du-projet)
 4. [Environnement de Test Local (OpenTofu / Terraform + Sample App)](#4-environnement-de-test-local-opentofu--terraform--sample-app)
 5. [Documentation du Workflow Testé E2E (Détails complets)](docs/WORKFLOW_E2E.md)
-6. [Prérequis](#5-prérequis)
-7. [Guide d'installation](#6-guide-dinstallation)
-8. [Configuration détaillée](#7-configuration-détaillée)
-9. [Exploitation & Commandes usuelles](#8-exploitation--commandes-usuelles)
-10. [Gestion des erreurs et Rollback](#9-gestion-des-erreurs-et-rollback)
+6. [Guide de Passage en Production (Checklist & Prérequis)](docs/PASSAGE_EN_PROD.md)
+7. [Prérequis Serveur](#5-prérequis)
+8. [Guide d'installation](#6-guide-dinstallation)
+9. [Configuration détaillée](#7-configuration-détaillée)
+10. [Exploitation & Commandes usuelles](#8-exploitation--commandes-usuelles)
+11. [Gestion des erreurs et Rollback](#9-gestion-des-erreurs-et-rollback)
 
 ---
 
