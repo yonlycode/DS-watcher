@@ -91,10 +91,11 @@ C'est l'étape la plus critique : mettre à jour le conteneur sans couper le ser
    * Détection du nouveau tag `1.1.0` (différent de la version en cours `1.0.0`).
    * Téléchargement en tâche de fond : `docker pull localhost:5001/sample-app:1.1.0` *(l'ancien conteneur continue de servir le trafic)*.
    * Démarrage du conteneur candidat `sample-app-candidate` sur le même réseau et avec les **mêmes labels de service Traefik**.
-   * Attente du `HEALTHCHECK` : pendant toute la phase d'initialisation, Traefik n'envoie aucune requête au candidat.
+   * Attente du `HEALTHCHECK` **côté script** : le `HEALTHCHECK` Docker sert à `autodeploy.sh` pour décider ou non de basculer.
+     **Ce que ce document affirmait à tort ici :** le provider Docker de Traefik ne lit **pas** `.State.Health`. Il route vers le candidat dès qu'il voit les labels, prêt ou non. Ce qui protège réellement le trafic pendant cette phase, ce sont les labels `traefik.http.services.*.loadbalancer.healthcheck.*` (la sonde propre à Traefik), pas le `HEALTHCHECK` Docker. Voir README §2.
    * Dès que le statut devient `healthy` :
-     * Traefik commence à distribuer les requêtes vers le nouveau conteneur.
-     * Arrêt gracieux de l'ancien conteneur (`docker stop -t 15 sample-app`). Traefik le retire instantanément de son pool de serveurs.
+     * Le candidat est déjà dans le pool — à condition que ses labels de service soient **identiques** à ceux de l'ancien (condition dure, README §2 règle 1).
+     * Arrêt gracieux de l'ancien conteneur (`docker stop -t 15 sample-app`). Traefik le retire **sur événement Docker**, pas instantanément : cette fenêtre résiduelle produit des requêtes en timeout (~2,5 % des requêtes émises pendant le swap, mesuré). Le moteur ne draine pas l'ancien avant de le stopper — README §2 règle 2.
      * Suppression de l'ancien conteneur et renommage du candidat en `sample-app`.
      * Délai de stabilisation de 2 secondes.
 
@@ -187,7 +188,7 @@ docker-publish:
 
 | Événement | Réaction du Système | Résultat en Prod |
 |---|---|---|
-| **Nouvelle version saine publiée** | Pull, démarrage parallèle, validation du healthcheck, bascule Traefik, extinction propre de l'ancienne version. | **Mise à jour sans coupure (0s downtime)** |
+| **Nouvelle version saine publiée** | Pull, démarrage parallèle, validation du healthcheck, bascule Traefik, extinction propre de l'ancienne version. | **Pas de coupure de service**, mais pas « 0s » : fenêtre résiduelle de ~2,5 % de requêtes en timeout pendant le swap, faute de drain préalable de l'ancien conteneur (README §2 règle 2). Le test à 200ms ne la voit pas passer ; à 50ms, oui. |
 | **Nouvelle version avec bug bloquant** | Le healthcheck échoue (`unhealthy`), arrêt et suppression du candidat, capture des logs d'erreur, notification. | **Prod préservée sur l'ancienne version** |
 | **Téléchargement d'image très long** | Le verrou `flock` empêche les déclenchements concurrents du timer Systemd. | **Aucun conflit ni collision** |
 | **Pas de nouvelle version** | Comparaison du digest/tag actuel avec le distant : sortie immédiate (0 opération Docker inutile). | **Charge CPU/Réseau quasi-nulle** |

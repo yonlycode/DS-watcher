@@ -9,9 +9,12 @@ APP_NAME="mon-application"
 # Chemin du dépôt d'image dans le GitLab Registry (SANS le tag)
 IMAGE_REPO="registry.gitlab.mon-entreprise.com/groupe/projet/mon-application"
 
-# ID numérique du projet dans GitLab (visible sous le titre du projet sur l'interface GitLab)
-# Utilisé pour interroger l'API /api/v4/projects/<id>/repository/tags
-GITLAB_PROJECT_ID="128"
+# [LEGACY / FALLBACK] ID numérique du projet dans GitLab.
+# NE PAS RENSEIGNER dans un contexte JFrog : le mode registre v2 (Mode 2 du script,
+# /v2/<repo>/tags/list) est LE chemin de prod. Ce champ n'active l'API tags GitLab
+# que comme fallback historique (le registry GitLab a un gap connu sur tags/list,
+# gitlab-org#600489 — d'où JFrog ici). Laisser vide.
+GITLAB_PROJECT_ID=""
 
 # Durée maximale en secondes d'attente pour que le conteneur devienne "healthy" (défaut: 60)
 HEALTHCHECK_TIMEOUT=45
@@ -55,16 +58,62 @@ DOCKER_RUN_ARGS=(
   --label "traefik.http.services.${APP_NAME}.loadbalancer.server.port=3000"
 
   # ============================================================================
-  # Healthcheck Docker (CRUCIAL pour le zéro downtime)
-  # Le conteneur ne sera considéré prêt que quand ce test réussit
+  # Healthcheck TRAEFIK (CRUCIAL — pas le HEALTHCHECK Docker)
+  # Le provider Docker de Traefik ne lit PAS .State.Health : il route dès la
+  # découverte des labels. Ces labels font qu'un candidat pas prêt est évincé
+  # par Traefik LUI-MÊME, même si le script se trompe de fenêtre de bascule.
   # ============================================================================
-  --health-cmd "curl -f http://localhost:3000/health || exit 1"
+  --label "traefik.http.services.${APP_NAME}.loadbalancer.healthcheck.path=/health"
+  --label "traefik.http.services.${APP_NAME}.loadbalancer.healthcheck.interval=3s"
+  --label "traefik.http.services.${APP_NAME}.loadbalancer.healthcheck.timeout=2s"
+
+  # ============================================================================
+  # Healthcheck Docker (CRUCIAL pour le zéro downtime)
+  # Le conteneur n'est considéré prêt que quand ce test réussit.
+  #
+  # wget, PAS curl : node:alpine, nginx:alpine, eclipse-temurin:jdk-alpine, etc.
+  # n'embarquent PAS curl. Un healthcheck qui appelle un binaire absent échoue
+  # toujours -> le candidat est jugé unhealthy -> déploiement refusé pour une raison
+  # qui n'a rien à voir avec l'application. wget busybox est, lui, présent partout.
+  # ============================================================================
+  --health-cmd "wget -q -O - http://localhost:3000/health >/dev/null || exit 1"
   --health-interval 3s
   --health-timeout 2s
   --health-retries 3
   --health-start-period 5s
 )
 
-# Commandes optionnelles à exécuter avant / après déploiement
-# PRE_DEPLOY_CMD="echo 'Préparation déploiement...'"
-# POST_DEPLOY_CMD="echo 'Déploiement terminé pour ${APP_NAME}'"
+# ==============================================================================
+# Budgets de temps (par app)
+# ==============================================================================
+# Le `docker pull` est borné : un registre qui garde le socket ouvert sans envoyer
+# de données gèlerait le cycle pour toutes les apps suivantes.
+# PULL_TIMEOUT=300
+
+# ==============================================================================
+# Exigence de HEALTHCHECK
+# ==============================================================================
+# Par défaut, une image SANS HEALTHCHECK Docker est REFUSÉE au déploiement : sans
+# lui, le script ne peut pas distinguer "l'app sert du contenu" de "le process
+# tourne dans le vide", et la bascule se fait à l'aveugle.
+# Si vous assumez ce risque pour cette app, décommentez :
+# ALLOW_NO_HEALTHCHECK=true
+# NO_HEALTHCHECK_STABLE_SECONDS=6   # stabilité du process exigée (pas une validation applicative)
+
+# ==============================================================================
+# Hooks (optionnels)
+# ==============================================================================
+# Exécutés via un wrapper qui loggue le hook par son NOM, capture le code de
+# sortie et pousse un webhook d'alerte identifiant le hook fautif.
+#
+#   pre-deploy  : après le pull, AVANT tout changement d'état. Un échec annule le
+#                 déploiement de cette app (l'ancien conteneur n'est pas touché).
+#   post-deploy : APRÈS la bascule. Un échec ne défait PAS la bascule (elle est
+#                 déjà effective) mais fait sortir le cycle en erreur.
+#
+# Variables exposées au hook (exportées, visibles par ses sous-processus) :
+#   HOOK_PHASE, APP_NAME, IMAGE_REPO, LATEST_TAG, TARGET_IMAGE,
+#   CURRENT_CONTAINER, NEXT_CONTAINER, CONF_FILE
+#
+# PRE_DEPLOY_CMD="echo '[$HOOK_PHASE] $APP_NAME -> $TARGET_IMAGE'"
+# POST_DEPLOY_CMD="curl -fsS -X POST https://ma-ci.example.com/hooks/deployed -d \"app=$APP_NAME&tag=$LATEST_TAG\""

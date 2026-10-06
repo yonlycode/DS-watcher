@@ -22,6 +22,22 @@ echo "==> Création des répertoires de configuration..."
 mkdir -p /etc/autodeploy/apps.d
 chmod 750 /etc/autodeploy
 
+# État persistant par app (tags déployés, digest de référence, compteurs d'échec).
+# 700 : l'état expose la liste des apps et leurs versions, et un fichier d'état
+# corrompu/édité à la main peut faire redéployer ou sauter la mauvaise version.
+echo "==> Création du répertoire d'état persistant..."
+mkdir -p /var/lib/autodeploy
+chmod 700 /var/lib/autodeploy
+echo "    [OK] /var/lib/autodeploy (état par app : last_deployed_tag/digest, échecs)."
+
+# Répertoire du verrou d'exécution. Recréé aussi par systemd (RuntimeDirectory=)
+# et auto-créé par le script : les trois chemins convergent vers /run/autodeploy.
+# JAMAIS /tmp : systemd-tmpfiles peut y supprimer un lock encore actif.
+echo "==> Création du répertoire de verrou..."
+mkdir -p /run/autodeploy
+chmod 700 /run/autodeploy
+echo "    [OK] /run/autodeploy (verrou d'exécution, root-only)."
+
 echo "==> Installation du script exécutable..."
 cp "${SCRIPT_DIR}/bin/autodeploy.sh" /usr/local/bin/autodeploy.sh
 chmod 755 /usr/local/bin/autodeploy.sh

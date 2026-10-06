@@ -12,7 +12,28 @@ User=root
 Group=root
 
 # Sécurisation de l'exécution
-TimeoutStartSec=600
+#
+# Pas de TimeoutStartSec FINI ici. Un kill de systemd pendant la bascule (entre le
+# `docker stop` de l'ancien conteneur et le `docker rename` du candidat) est le
+# pire scénario possible : l'ancien est mort, le candidat est vivant mais mal nommé,
+# et la procédure de rollback ne s'exécute jamais. Un plafond de 600s arbitraire
+# tue donc exactement au mauvais moment.
+#
+# Le budget est porté PAR APP dans le script :
+#   PULL_TIMEOUT          (docker pull, défaut 300s)
+# + HEALTHCHECK_TIMEOUT   (attente du healthy, défaut 60s)
+# + ~30s de marge         (rename, hooks, cleanup)
+#
+# Si vous préférez un plafond global explicite, calculez-le et remplacez infinity :
+#   TimeoutStartSec = N_apps * (PULL_TIMEOUT + HEALTHCHECK_TIMEOUT + 30)
+#   ex : 5 apps * (300 + 60 + 30) = 1950
+TimeoutStartSec=infinity
+
+# /run/autodeploy est créé par systemd au démarrage du service, avec le bon
+# propriétaire (utile dès qu'un user dédié remplace root — Phase 7). Le lock y vit.
+# Recréé à chaque démarrage : aucun lock fantôme hérité d'un crash.
+RuntimeDirectory=autodeploy
+RuntimeDirectoryMode=0700
 StandardOutput=journal
 StandardError=journal
 
