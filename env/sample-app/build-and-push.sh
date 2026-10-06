@@ -28,6 +28,10 @@ if [[ "$FLAG" == "--broken" ]]; then
   echo "==> ATTENTION : Construction d'une version corrompue (FAIL_HEALTH=true)"
 fi
 
+# Marqueur de build (optionnel) : change le contenu de l'image sans changer le tag.
+# Permet de tester la détection de "tag repoussé, contenu changé" (Phase 4/5).
+BUILD_MARKER="${BUILD_MARKER:-none}"
+
 echo "==> 1. Construction de l'image Docker : ${IMAGE_NAME}..."
 docker build \
   --build-arg APP_VERSION="$VERSION" \
@@ -39,6 +43,7 @@ COPY server.js /app/server.js
 ENV PORT=3000
 ENV APP_VERSION=${VERSION}
 ENV FAIL_HEALTH=${FAIL_HEALTH}
+ENV BUILD_MARKER=${BUILD_MARKER}
 HEALTHCHECK --interval=2s --timeout=1s --retries=2 --start-period=2s \
   CMD wget -q -O - http://127.0.0.1:3000/health || exit 1
 EXPOSE 3000

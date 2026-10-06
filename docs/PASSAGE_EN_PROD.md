@@ -111,16 +111,33 @@ publish-to-jfrog:
 
 ---
 
-### Action 3 : Vérifier le `HEALTHCHECK` dans les Dockerfiles
+### Action 3 : `HEALTHCHECK` Docker + Graceful Shutdown dans les Dockerfiles
 
-Pour garantir le **zéro downtime**, Traefik ne bascule le trafic que lorsque le conteneur candidat est réellement prêt.
-Ajoutez dans le `Dockerfile` de chaque application :
+Le `HEALTHCHECK` Docker sert au **script** (validation du candidat avant bascule).
+**Rappel important :** ce n'est PAS lui qui protège Traefik — pour ça, il faut les
+labels `traefik.http.services.*.healthcheck.*` (cf. Action 4B). Ajoutez dans le
+`Dockerfile` de chaque application :
 
 ```dockerfile
 # Exemple pour Node.js / Python / Go / PHP / Java :
 HEALTHCHECK --interval=3s --timeout=2s --retries=3 --start-period=5s \
-  CMD curl -f http://localhost:8080/health || exit 1
+  CMD wget -q -O - http://localhost:8080/health || exit 1
 ```
+
+**Graceful shutdown (exigence).** Lors de la bascule, l'ancien conteneur reçoit un
+`SIGTERM` puis est forcé après le grace period (`docker stop -t 15` côté script).
+L'application **doit** drainer ses connexions en cours au `SIGTERM` avant de sortir,
+sinon des requêtes actives sont coupées net. Exemple canonique (Node, cf.
+`env/sample-app/server.js`) :
+
+```js
+process.on('SIGTERM', () => {
+  server.close(() => process.exit(0)); // draine les connexions puis sort
+});
+```
+
+Gardez le grace period **cohérent** avec le `-t 15` du script : une app qui met plus
+de 15 s à drainer sera tuée en plein vol.
 
 ---
 
@@ -178,6 +195,11 @@ DOCKER_RUN_ARGS=(
   --label "traefik.http.routers.mon-api.rule=Host(\`api.mon-entreprise.fr\`)"
   --label "traefik.http.routers.mon-api.entrypoints=websecure"
   --label "traefik.http.services.mon-api.loadbalancer.server.port=3000"
+
+  # Healthcheck TRAEFIK (le vrai garde-fou : Traefik évince le candidat non prêt)
+  --label "traefik.http.services.mon-api.loadbalancer.healthcheck.path=/health"
+  --label "traefik.http.services.mon-api.loadbalancer.healthcheck.interval=3s"
+  --label "traefik.http.services.mon-api.loadbalancer.healthcheck.timeout=2s"
 )
 ```
 
