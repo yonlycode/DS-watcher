@@ -55,6 +55,31 @@ echo "    TEST COMPLET DU FLUX AUTODEPLOY (IAC + REGISTRY + TRAEFIK + APP)  "
 echo "    Moteur IaC utilisé : $IAC_BIN"
 echo "======================================================================"
 
+# Détection du socket Docker (rootless vs rootful) — même logique que la démo.
+# Injecté dans Terraform via TF_VAR_docker_socket, qui alimente à la fois le
+# provider docker ET le montage du socket dans le conteneur Traefik : une seule
+# source de vérité, aucun décalage provider/volume. Sur un démon rootless,
+# /var/run/docker.sock est inaccessible au conteneur ("permission denied") ; le
+# socket réel vit dans $XDG_RUNTIME_DIR.
+detect_docker_socket() {
+  if [[ -n "${DOCKER_HOST:-}" ]]; then
+    case "$DOCKER_HOST" in
+      unix://*) printf '%s' "${DOCKER_HOST#unix://}"; return 0 ;;
+      *) return 1 ;;   # tcp/ssh : non montable comme volume conteneur
+    esac
+  fi
+  local xrd="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+  [[ -S "$xrd/docker.sock" ]] && { printf '%s' "$xrd/docker.sock"; return 0; }
+  [[ -S /var/run/docker.sock ]] && { printf '/var/run/docker.sock'; return 0; }
+  return 1
+}
+if ! DOCKER_SOCK="$(detect_docker_socket)"; then
+  echo "[ERREUR] Aucun socket Docker détecté (DOCKER_HOST unix://, \$XDG_RUNTIME_DIR/docker.sock, /var/run/docker.sock)." >&2
+  exit 1
+fi
+export TF_VAR_docker_socket="$DOCKER_SOCK"
+echo "    [socket Docker] $DOCKER_SOCK"
+
 cleanup_sandbox() {
   echo ""
   touch "$PING_STOP" 2>/dev/null || true

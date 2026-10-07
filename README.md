@@ -184,6 +184,41 @@ Ce scénario automatique va :
 6. Construire et publier une version `sample-app:1.2.0` avec un endpoint `/health` défaillant (erreur 500).
 7. Valider que le script déclenche le **Rollback automatique**, détruit le candidat défaillant et maintient la version stable en production.
 
+### ⚠️ Prérequis Docker (rootless, registre HTTP, version Traefik)
+
+Ces trois points font échouer le scénario sur une machine récente s'ils ne sont
+pas réunis. Le socket est **auto-détecté** et Traefik **épinglé en v3.6**, mais le
+registre HTTP local demande une configuration du démon.
+
+**1. Socket Docker (rootless vs rootful).** Le script et Terraform montent le
+socket que le démon écoute réellement, détecté dans cet ordre : `DOCKER_HOST`
+(`unix://…`) → `$XDG_RUNTIME_DIR/docker.sock` (rootless) → `/var/run/docker.sock`
+(rootful). Sur un Docker **rootless**, `/var/run/docker.sock` n'existe pas pour le
+conteneur : y pointer donne `permission denied`. C'est auto-détecté, rien à faire.
+En `terraform apply` **direct** (hors script), passez la valeur à la main :
+`TF_VAR_docker_socket=/run/user/$(id -u)/docker.sock`.
+
+**2. Registre HTTP local (`insecure-registries`).** Le scénario pousse sur
+`localhost:5001` en **HTTP** (`registry:2` sans TLS). Docker refuse par défaut et
+bascule en HTTPS (`https://localhost:5001 … connection refused`). Il faut
+déclarer le registre en `insecure-registries` puis **redémarrer le démon** :
+
+```bash
+# rootful : /etc/docker/daemon.json (sudo)   |   rootless : ~/.config/docker/daemon.json
+{ "insecure-registries": ["localhost:5001", "127.0.0.1:5001"] }
+
+# rootful : sudo systemctl restart docker
+# rootless : systemctl --user restart docker
+```
+
+Sans ça, le `docker push` de l'étape 2 échoue et le scénario s'arrête.
+
+**3. Version de Traefik.** Le scénario utilise **`traefik:v3.6`** (variable
+`traefik_image`). **Ne pas remettre `v3.0`** avec Docker ≥ 28 : son client Docker
+négocie l'API `1.24`, refusée par le démon (`Minimum supported API version is
+1.40`), le provider ne se charge pas et **tout répond 404**. Les règles de labels
+du §2 (retry en middleware, healthcheck de service, `priority`) sont identiques en
+v3.6.
 
 ---
 

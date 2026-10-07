@@ -27,9 +27,9 @@ resource "docker_container" "registry" {
   restart = "unless-stopped"
 }
 
-# Image Traefik v3
+# Image Traefik v3 (v3.6+ requis pour Docker Engine >= 28, voir variables.tf)
 resource "docker_image" "traefik" {
-  name         = "traefik:v3.0"
+  name         = var.traefik_image
   keep_locally = true
 }
 
@@ -47,7 +47,7 @@ resource "docker_container" "traefik" {
   ]
 
   volumes {
-    host_path      = "/var/run/docker.sock"
+    host_path      = var.docker_socket
     container_path = "/var/run/docker.sock"
     read_only      = true
   }

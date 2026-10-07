@@ -19,6 +19,33 @@ DEMO_HTTP_PORT="${DEMO_HTTP_PORT:-8080}"
 DEMO_DASH_PORT="${DEMO_DASH_PORT:-8081}"
 DEMO_URL="http://localhost:${DEMO_HTTP_PORT}"
 
+# Image Traefik épinglée. v3.0 est INCOMPATIBLE avec Docker Engine >= 28 : son
+# client Docker négocie l'API 1.24, refusée par le démon (minimum 1.40) =>
+# "client version 1.24 is too old" => provider Docker mort => 404 général. v3.6
+# embarque un client qui négocie une API récente. Surchargable : TRAEFIK_IMAGE=...
+TRAEFIK_IMAGE="${TRAEFIK_IMAGE:-traefik:v3.6}"
+
+# Détection du socket Docker à monter dans Traefik. Un démon ROOTLESS (lancé sous
+# l'utilisateur, pas root) n'expose PAS /var/run/docker.sock au conteneur : y
+# pointer donne "permission denied". Le socket réel vit dans $XDG_RUNTIME_DIR.
+# Ordre : DOCKER_HOST (unix://) > socket rootless > socket rootful classique.
+detect_docker_socket() {
+  if [[ -n "${DOCKER_HOST:-}" ]]; then
+    case "$DOCKER_HOST" in
+      unix://*) printf '%s' "${DOCKER_HOST#unix://}"; return 0 ;;
+      *) return 1 ;;   # tcp/ssh : non montable comme volume conteneur
+    esac
+  fi
+  local xrd="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+  [[ -S "$xrd/docker.sock" ]] && { printf '%s' "$xrd/docker.sock"; return 0; }
+  [[ -S /var/run/docker.sock ]] && { printf '/var/run/docker.sock'; return 0; }
+  return 1
+}
+if ! DOCKER_SOCK="$(detect_docker_socket)"; then
+  echo "[ERREUR] Aucun socket Docker détecté (DOCKER_HOST unix://, \$XDG_RUNTIME_DIR/docker.sock, /var/run/docker.sock)." >&2
+  exit 1
+fi
+
 # Suivi d'échec : ce script DOIT pouvoir rougir (un "SUCCÈS" inconditionnel ne prouve rien).
 FAILED=0
 fail() { echo "    [ÉCHEC] $*"; FAILED=1; }
@@ -89,13 +116,14 @@ DEMO_LABELS=(
 
 # 2. Démarrage de Traefik en mode Docker Provider
 echo "==> 2. Démarrage de Traefik (HTTP sur localhost:${DEMO_HTTP_PORT}, Dashboard sur ${DEMO_DASH_PORT})..."
+echo "       [image=${TRAEFIK_IMAGE} socket=${DOCKER_SOCK}]"
 docker rm -f demo-traefik 2>/dev/null || true
 docker run -d --name demo-traefik \
   --network "$TRAEFIK_NET" \
   -p "${DEMO_HTTP_PORT}:80" \
   -p "${DEMO_DASH_PORT}:8080" \
-  -v /var/run/docker.sock:/var/run/docker.sock:ro \
-  traefik:v3.0 \
+  -v "${DOCKER_SOCK}:/var/run/docker.sock:ro" \
+  "${TRAEFIK_IMAGE}" \
   --api.insecure=true \
   --providers.docker=true \
   --providers.docker.exposedbydefault=false \

@@ -21,3 +21,15 @@ variable "traefik_dashboard_port" {
   type        = number
   default     = 9081
 }
+
+variable "docker_socket" {
+  description = "Chemin du socket Docker (provider + montage dans Traefik). Auto-detecte par test-full-scenario.sh via TF_VAR_docker_socket. En apply direct sur Docker rootless : TF_VAR_docker_socket=/run/user/<uid>/docker.sock"
+  type        = string
+  default     = "/var/run/docker.sock"
+}
+
+variable "traefik_image" {
+  description = "Image Traefik. v3.6+ requis pour Docker Engine >= 28 (v3.0 bloque : API 1.24 refusee par le demon)"
+  type        = string
+  default     = "traefik:v3.6"
+}

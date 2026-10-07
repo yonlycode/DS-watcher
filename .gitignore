@@ -32,6 +32,8 @@ crash.*.log
 *.lock
 *.lockdir
 /tmp/autodeploy.*
+# Harnais de test VM (cle SSH privee incluse) — ne jamais commiter
+.vmtest/
 
 # ==============================================================================
 # Logs applicatifs
